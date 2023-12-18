@@ -14,8 +14,8 @@ for path in os.listdir(dir_path):
 for i in range(count):
     image = cv2.imread(f"data/task_lights_on/{i+1}.jpg", 0)
     thresholding(image, 0)
-    Canning(image)
-
+    output = Canning(image)
+    print(output)
 
 # # Collect Images
 # cv2.imshow("Lights on", rescaleFrame(image))

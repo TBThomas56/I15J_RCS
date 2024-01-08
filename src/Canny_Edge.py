@@ -11,6 +11,23 @@ def rescaleFrame(frame, scale=0.60):
     return cv2.resize(frame, dimensions, interpolation=cv2.INTER_AREA)
 
 
+def dewarp(image, inputs, plot=0):
+    # TODO: fix warping based off of image selection
+    assert image is not None, "file could not be read, check with os.path.exists()"
+    rows, cols = image.shape
+    input_points = np.float32([inputs[0], inputs[1], inputs[2], inputs[3]])
+    output_points = np.float32([[0, 0], [0, rows], [cols, rows], [cols, 0]])
+    M = cv2.getPerspectiveTransform(input_points, output_points)
+    dst = cv2.warpPerspective(image, M, (cols, rows))
+
+    if plot == 1:
+        cv2.imshow("originial", image)
+        cv2.imshow("dewarped", dst)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    return dst
+
+
 def thresholding(image, plot):
     a: dict = {}
     for i in range(50, 121, 5):
@@ -34,6 +51,22 @@ def thresholding(image, plot):
     return a
 
 
+def adding_circles(circles, image):
+    for pt in circles[0, :]:
+        x, y, r = pt[0], pt[1], pt[2]
+
+        # Draw the circumference of the circle.
+        cv2.circle(image, (x, y), r, (0, 255, 0), 2)
+
+        # Draw a small circle (of radius 1) to show the center.
+        cv2.circle(image, (x, y), 5, (0, 0, 255), 3)
+
+    cv2.imshow("circles", image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    return image
+
+
 def Canning(image):
     x = thresholding(image, 0)
 
@@ -51,59 +84,46 @@ def Canning(image):
         maxRadius=300,
     )
 
-    # Draw circles that are detected.
     if detected_circles is not None:
         # Convert the circle parameters a, b and r to integers.
         detected_circles = np.uint16(np.around(detected_circles))
         # output = np.zeros(np.shape(detected_circles)[1])
         output = []
-        output1 = []
+
         for pt in detected_circles[0, :]:
             x, y, r = pt[0], pt[1], pt[2]
-
-            # Draw the circumference of the circle.
-            cv2.circle(image, (x, y), r, (0, 255, 0), 2)
-
-            # Draw a small circle (of radius 1) to show the center.
-            cv2.circle(image, (x, y), 50, (0, 0, 255), 3)
-
             # Mask Image with Circle
             mask = np.zeros_like(image)
             mask = cv2.circle(mask, (x, y), r, (255, 255, 255), -1)
 
             masked = cv2.bitwise_and(image, image, mask=mask)
-            # Check 1: Averaging the intensity
-            avg = np.average(masked)
-            if avg > 2.85:
-                output.append("Lid")
-            else:
+
+            # Check 2: Find small circles
+            mini_circles = cv2.HoughCircles(
+                masked,
+                cv2.HOUGH_GRADIENT,
+                dp=1,
+                minDist=35,
+                param1=225,
+                param2=25,
+                minRadius=1,
+                maxRadius=25,
+            )
+
+            if mini_circles is not None:
+                mini_circles = np.uint16(np.around(mini_circles))
                 output.append("Puck")
+                image_mini = adding_circles(mini_circles, masked)
+            else:
+                output.append("Lid")
 
-            # # Check 2: Find small circles
-            # mini_circles = cv2.HoughCircles(
-            #     masked,
-            #     cv2.HOUGH_GRADIENT,
-            #     dp=1,
-            #     minDist=25,
-            #     param1=225,
-            #     param2=67,
-            #     minRadius=1,
-            #     maxRadius=50,
-            # )
-
-            # if mini_circles is not None:
-            #     output1.append("Puck")
-            #     print(f"Mini Circles: {output1}")
-            # else:
-            #     output1.append("Lid")
-
-            # TODO: Apply algorithm to try identify different pucks and lids. Create them in different data structures
+        # TODO: Apply algorithm to try identify different pucks and lids. Create them in different data structures
+        image_drawn = adding_circles(detected_circles, image)
 
     # show Canny Edge Detection
-    a50_resized = rescaleFrame(a50_edges_canny)
 
-    cv2.imshow("circles", rescaleFrame(image))
-    cv2.imshow("edges", a50_resized)
+    # cv2.imshow("circles", image_drawn)
+    cv2.imshow("edges", a50_edges_canny)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     return output
